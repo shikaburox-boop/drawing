@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ESP32 Mobile Smooth Canvas</title>
+    <title>ESP32 Mobile Real-time Canvas</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -61,6 +61,7 @@
         .slider-wrapper { display: flex; align-items: center; gap: 10px; flex-grow: 1; font-size: 13px; }
         input[type="range"] { flex-grow: 1; accent-color: #00adb5; }
         .btn-group { display: flex; gap: 8px; width: 100%; }
+        
         button { padding: 8px 12px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; flex-grow: 1; font-size: 13px; }
         button#eraserBtn { background-color: #555; }
         button#eraserBtn.active { background-color: #00adb5; box-shadow: 0 0 8px #00adb5;}
@@ -117,17 +118,16 @@
         let savedColor = '#ffffff'; 
         let currentColorRgb565 = 0xFFFF; 
 
-        // 🚀 ชี้เป้าไปที่ IP ของ Access Point Mode (192.168.4.1)
         const ESP32_IP = "192.168.4.1"; 
         const ws = new WebSocket(`ws://${ESP32_IP}:81`);
         ws.binaryType = "arraybuffer";
 
         ws.onopen = () => {
-            statusDiv.innerText = "🟢 เชื่อมต่อแบบไร้สายเรียบร้อย วาดรูปได้เลย!";
+            statusDiv.innerText = "🟢 Connected เรียบร้อย วาดรูปได้เลย!";
             statusDiv.className = "connected";
         };
         ws.onclose = () => {
-            statusDiv.innerText = "🔴 สัญญาณหลุด (กรุณาเช็คว่ามือถือยังต่อ Wi-Fi บอร์ดอยู่ไหม)";
+            statusDiv.innerText = "🔴 สัญญาณหลุดจากบอร์ด";
             statusDiv.className = "";
         };
 
@@ -199,7 +199,6 @@
             isPainting = true;
             const { x, y } = getCoordinates(e);
             points = [{ x, y }];
-            sendCoordinates(x, y, x, y, currentColorRgb565); 
         }
 
         function draw(e) {
@@ -222,16 +221,29 @@
             }
         }
 
-        function stopDrawing() { isPainting = false; points = []; }
+        // 🎯 ดักจับตอนปล่อยนิ้ว/เมาส์: ถ้าลากสั้นมากๆ หรือแค่กดจิ้มจุด ให้พ่นพิกัดทันที
+        function stopDrawing() { 
+            if (!isPainting) return;
+            isPainting = false; 
+
+            if (points.length <= 2 && points.length > 0) {
+                const pt = points[0];
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.fill();
+
+                // ส่งค่าที่ x1=x2 และ y1=y2 ไปบอกบอร์ดว่าเป็นจุดเดี่ยวสั้นๆ
+                sendCoordinates(pt.x, pt.y, pt.x, pt.y, currentColorRgb565);
+            }
+            points = [];
+        }
 
         function sendCoordinates(x1, y1, x2, y2, color565) {
             if (ws.readyState === WebSocket.OPEN) {
                 const buffer = new ArrayBuffer(12);
                 const view = new Int16Array(buffer);
-                view[0] = x1;
-                view[1] = y1;
-                view[2] = x2;
-                view[3] = y2;
+                view[0] = x1; view[1] = y1; view[2] = x2; view[3] = y2;
                 view[4] = color565;
                 view[5] = parseInt(sizeSlider.value);
                 ws.send(buffer);
