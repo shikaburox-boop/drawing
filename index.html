@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Real-time Smooth Canvas</title>
+    <title>ESP32 Pure Wireless Bluetooth Canvas</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -28,7 +28,6 @@
             max-width: 240px; 
             aspect-ratio: 240 / 320;
         }
-
         canvas {
             background-color: #000;
             border: 4px solid #393e46;
@@ -40,7 +39,6 @@
             height: 100%;
             display: block;
         }
-        
         .toolbar {
             margin-top: 15px;
             display: flex;
@@ -54,81 +52,28 @@
             max-width: 270px;
             box-sizing: border-box;
         }
-
-        .row {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .palette {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-
-        .color-dot {
-            width: 25px;
-            height: 25px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: transform 0.1s;
-        }
+        .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+        .palette { display: flex; gap: 8px; align-items: center; }
+        .color-dot { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; }
         .color-dot:hover { transform: scale(1.1); }
         .color-dot.active { border-color: #ffffff; transform: scale(1.15); }
-
-        input[type="color"] {
-            border: none;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            cursor: pointer;
-            background: none;
-            padding: 0;
-        }
-
-        .slider-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-grow: 1;
-            font-size: 13px;
-        }
-
-        input[type="range"] {
-            flex-grow: 1;
-            accent-color: #00adb5;
-        }
-
-        .btn-group {
-            display: flex;
-            gap: 8px;
-            width: 100%;
-        }
-
-        button {
-            padding: 8px 12px;
-            border: none;
-            border-radius: 8px;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
-            flex-grow: 1;
-            font-size: 13px;
-        }
+        input[type="color"] { border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; background: none; padding: 0; }
+        .slider-wrapper { display: flex; align-items: center; gap: 10px; flex-grow: 1; font-size: 13px; }
+        input[type="range"] { flex-grow: 1; accent-color: #00adb5; }
+        .btn-group { display: flex; gap: 8px; width: 100%; }
+        
+        button { padding: 8px 12px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; flex-grow: 1; font-size: 13px; }
+        button#connectBtn { background-color: #00adb5; margin-bottom: 10px; padding: 10px 20px; font-size: 14px; border-radius: 20px;}
         button#eraserBtn { background-color: #555; }
         button#eraserBtn.active { background-color: #00adb5; box-shadow: 0 0 8px #00adb5;}
         button#clearBtn { background-color: #ff4141; }
-        button#clearBtn:hover { background-color: #c70039; }
     </style>
 </head>
 <body>
 
-    <h1>#ipad พัง</h1>
-    <div id="status">🔴 Disconnected</div>
+    <h1>ESP32 Bluetooth Drawer</h1>
+    <button id="connectBtn">🔍 ค้นหาและเชื่อมต่อ Bluetooth</button>
+    <div id="status">🔴 ไม่ได้เชื่อมต่อบลูทูธ</div>
 
     <div class="canvas-container">
         <canvas id="paintCanvas" width="240" height="320"></canvas>
@@ -142,10 +87,9 @@
                 <div class="color-dot" style="background-color: #ffeb3b;" data-color="#ffeb3b"></div>
                 <div class="color-dot" style="background-color: #00e676;" data-color="#00e676"></div>
                 <div class="color-dot" style="background-color: #00adb5;" data-color="#00adb5"></div>
-                <input type="color" id="colorPicker" value="#ffffff" title="เลือกสีอื่นๆ">
+                <input type="color" id="colorPicker" value="#ffffff">
             </div>
         </div>
-
         <div class="row">
             <div class="slider-wrapper">
                 <span>ขนาดเส้น:</span>
@@ -153,17 +97,17 @@
                 <span id="sizeVal">3</span>
             </div>
         </div>
-        
         <div class="btn-group">
             <button id="eraserBtn">🧽 ยางลบ</button>
             <button id="clearBtn">🗑️ ล้างหน้าจอ</button>
         </div>
     </div>
 
-    <script {nonce}>
+    <script>
         const canvas = document.getElementById('paintCanvas');
         const ctx = canvas.getContext('2d');
         const statusDiv = document.getElementById('status');
+        const connectBtn = document.getElementById('connectBtn');
         const clearBtn = document.getElementById('clearBtn');
         const eraserBtn = document.getElementById('eraserBtn');
         const colorPicker = document.getElementById('colorPicker');
@@ -173,25 +117,39 @@
 
         let isPainting = false;
         let isEraser = false;
-        
-        // 🚀 เก็บอาร์เรย์ของจุดพิกัดเพื่อนำมาคำนวณความโค้งสมูท
         let points = []; 
-
         let savedColor = '#ffffff'; 
         let currentColorRgb565 = 0xFFFF; 
 
-        const ESP32_IP = "192.168.1.114"; 
-        const ws = new WebSocket(`ws://${ESP32_IP}:81`);
-        ws.binaryType = "arraybuffer";
+        // ตัวแปรเก็บ Object บลูทูธไร้สาย
+        let bleCharacteristic;
 
-        ws.onopen = () => {
-            statusDiv.innerText = "🟢 Connected";
-            statusDiv.className = "connected";
-        };
-        ws.onclose = () => {
-            statusDiv.innerText = "🔴 Disconnected";
-            statusDiv.className = "";
-        };
+        const SERVICE_UUID = "4fafc201-75d5-4b36-834e-a5ba75d5c7c1";
+        const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
+        // ค้นหาและเกาะบลูทูธผ่านอากาศ
+        connectBtn.addEventListener('click', async () => {
+            try {
+                statusDiv.innerText = "กำลังค้นหาอุปกรณ์...";
+                
+                // ค้นหาอุปกรณ์บลูทูธไร้สายที่ปล่อยชื่อ "ESP32-Painter-Wireless"
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'ESP32-Painter-Wireless' }],
+                    optionalServices: [SERVICE_UUID]
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+                
+                statusDiv.innerText = "🟢 เชื่อมต่อบลูทูธไร้สายสำเร็จ!";
+                statusDiv.className = "connected";
+                connectBtn.style.display = "none"; 
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerText = "🔴 เชื่อมต่อไม่สำเร็จ: " + error.message;
+            }
+        });
 
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;           
@@ -251,71 +209,72 @@
             const rect = canvas.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            
-            const x = Math.floor((clientX - rect.left) * (canvas.width / rect.width));
-            const y = Math.floor((clientY - rect.top) * (canvas.height / rect.height));
-            return { x, y };
+            return {
+                x: Math.floor((clientX - rect.left) * (canvas.width / rect.width)),
+                y: Math.floor((clientY - rect.top) * (canvas.height / rect.height))
+            };
         }
 
         function startDrawing(e) {
+            if (!bleCharacteristic) return;
             isPainting = true;
             const { x, y } = getCoordinates(e);
-            points = []; // เคลียร์จุดเดิมเมื่อเริ่มลากเส้นใหม่
-            points.push({ x, y });
-            
+            points = [{ x, y }];
             sendCoordinates(x, y, x, y, currentColorRgb565); 
         }
 
         function draw(e) {
-            if (!isPainting) return;
+            if (!isPainting || !bleCharacteristic) return;
             e.preventDefault();
             const { x, y } = getCoordinates(e);
-            
             points.push({ x, y });
 
             if (points.length > 2) {
-                // 🎯 ไฮไลท์: คำนวณหาจุดกึ่งกลาง (Midpoint) ระหว่างจุดปัจจุบันและจุดก่อนหน้า เพื่อดัดเส้นให้โค้งมน (Smooth)
                 const i = points.length - 1;
                 const xc = (points[i].x + points[i - 1].x) / 2;
                 const yc = (points[i].y + points[i - 1].y) / 2;
 
                 ctx.beginPath();
                 ctx.moveTo(points[i - 2].x, points[i - 2].y);
-                // ดัดโค้งด้วยพิกัดกำลังสอง (Quadratic Curve)
                 ctx.quadraticCurveTo(points[i - 1].x, points[i - 1].y, xc, yc);
                 ctx.stroke();
 
-                // ส่งพิกัดเฉลี่ยที่โค้งเนียนแล้วไปให้ ESP32 วาดตาม
                 sendCoordinates(Math.floor(points[i - 2].x), Math.floor(points[i - 2].y), Math.floor(xc), Math.floor(yc), currentColorRgb565);
             }
         }
 
-        function stopDrawing() { 
-            isPainting = false; 
-            points = [];
-        }
+        function stopDrawing() { isPainting = false; points = []; }
 
-        function sendCoordinates(x1, y1, x2, y2, color565) {
-            if (ws.readyState === WebSocket.OPEN) {
-                const buffer = new ArrayBuffer(10);
+        // ยิงข้อมูล 12 Bytes แบบไร้สายผ่านสัญญาณวิทยุบลูทูธ
+        async function sendCoordinates(x1, y1, x2, y2, color565) {
+            if (bleCharacteristic) {
+                const buffer = new ArrayBuffer(12);
                 const view = new Int16Array(buffer);
                 view[0] = x1;
                 view[1] = y1;
                 view[2] = x2;
                 view[3] = y2;
                 view[4] = color565;
-                ws.send(buffer);
+                view[5] = parseInt(sizeSlider.value);
+                
+                try {
+                    // ใช้คำสั่งเขียนข้อมูลลงบลูทูธแบบไร้สายทันที
+                    await bleCharacteristic.writeValueWithoutResponse(buffer);
+                } catch (err) {
+                    console.error("ส่งข้อมูลหลุด:", err);
+                }
             }
         }
 
-        clearBtn.addEventListener('click', () => {
+        clearBtn.addEventListener('click', async () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (ws.readyState === WebSocket.OPEN) {
+            if (bleCharacteristic) {
                 const buffer = new ArrayBuffer(12);
                 const view = new Int16Array(buffer);
                 view[0] = -1; 
-                
-                ws.send(buffer);
+                try {
+                    await bleCharacteristic.writeValueWithoutResponse(buffer);
+                } catch (err) { console.error(err); }
             }
         });
 
@@ -325,22 +284,6 @@
         canvas.addEventListener('touchstart', startDrawing);
         canvas.addEventListener('touchmove', draw);
         window.addEventListener('touchend', stopDrawing);
-
-        function sendCoordinates(x1, y1, x2, y2, color565) {
-            if (ws.readyState === WebSocket.OPEN) {
-                const buffer = new ArrayBuffer(12); 
-                const view = new Int16Array(buffer);
-                
-                view[0] = x1;
-                view[1] = y1;
-                view[2] = x2;
-                view[3] = y2;
-                view[4] = color565;
-                view[5] = parseInt(sizeSlider.value);
-                
-                ws.send(buffer);
-            }
-        }
     </script>
 </body>
 </html>
