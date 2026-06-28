@@ -2,8 +2,8 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Pure Wireless Bluetooth Canvas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ESP32 Mobile Smooth Canvas</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -61,9 +61,7 @@
         .slider-wrapper { display: flex; align-items: center; gap: 10px; flex-grow: 1; font-size: 13px; }
         input[type="range"] { flex-grow: 1; accent-color: #00adb5; }
         .btn-group { display: flex; gap: 8px; width: 100%; }
-        
         button { padding: 8px 12px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; flex-grow: 1; font-size: 13px; }
-        button#connectBtn { background-color: #00adb5; margin-bottom: 10px; padding: 10px 20px; font-size: 14px; border-radius: 20px;}
         button#eraserBtn { background-color: #555; }
         button#eraserBtn.active { background-color: #00adb5; box-shadow: 0 0 8px #00adb5;}
         button#clearBtn { background-color: #ff4141; }
@@ -71,9 +69,8 @@
 </head>
 <body>
 
-    <h1>ESP32 Bluetooth Drawer</h1>
-    <button id="connectBtn">🔍 ค้นหาและเชื่อมต่อ Bluetooth</button>
-    <div id="status">🔴 ไม่ได้เชื่อมต่อบลูทูธ</div>
+    <h1>ESP32 Mobile Drawer</h1>
+    <div id="status">🔴 ดึงข้อมูลพิกัด (กรุณาต่อ Wi-Fi บอร์ดก่อน)</div>
 
     <div class="canvas-container">
         <canvas id="paintCanvas" width="240" height="320"></canvas>
@@ -107,7 +104,6 @@
         const canvas = document.getElementById('paintCanvas');
         const ctx = canvas.getContext('2d');
         const statusDiv = document.getElementById('status');
-        const connectBtn = document.getElementById('connectBtn');
         const clearBtn = document.getElementById('clearBtn');
         const eraserBtn = document.getElementById('eraserBtn');
         const colorPicker = document.getElementById('colorPicker');
@@ -121,35 +117,19 @@
         let savedColor = '#ffffff'; 
         let currentColorRgb565 = 0xFFFF; 
 
-        // ตัวแปรเก็บ Object บลูทูธไร้สาย
-        let bleCharacteristic;
+        // 🚀 ชี้เป้าไปที่ IP ของ Access Point Mode (192.168.4.1)
+        const ESP32_IP = "192.168.4.1"; 
+        const ws = new WebSocket(`ws://${ESP32_IP}:81`);
+        ws.binaryType = "arraybuffer";
 
-        const SERVICE_UUID = "4fafc201-75d5-4b36-834e-a5ba75d5c7c1";
-        const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-
-        // ค้นหาและเกาะบลูทูธผ่านอากาศ
-        connectBtn.addEventListener('click', async () => {
-            try {
-                statusDiv.innerText = "กำลังค้นหาอุปกรณ์...";
-                
-                // ค้นหาอุปกรณ์บลูทูธไร้สายที่ปล่อยชื่อ "ESP32-Painter-Wireless"
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ name: 'ESP32-Painter-Wireless' }],
-                    optionalServices: [SERVICE_UUID]
-                });
-
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-                
-                statusDiv.innerText = "🟢 เชื่อมต่อบลูทูธไร้สายสำเร็จ!";
-                statusDiv.className = "connected";
-                connectBtn.style.display = "none"; 
-            } catch (error) {
-                console.error(error);
-                statusDiv.innerText = "🔴 เชื่อมต่อไม่สำเร็จ: " + error.message;
-            }
-        });
+        ws.onopen = () => {
+            statusDiv.innerText = "🟢 เชื่อมต่อแบบไร้สายเรียบร้อย วาดรูปได้เลย!";
+            statusDiv.className = "connected";
+        };
+        ws.onclose = () => {
+            statusDiv.innerText = "🔴 สัญญาณหลุด (กรุณาเช็คว่ามือถือยังต่อ Wi-Fi บอร์ดอยู่ไหม)";
+            statusDiv.className = "";
+        };
 
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;           
@@ -216,7 +196,6 @@
         }
 
         function startDrawing(e) {
-            if (!bleCharacteristic) return;
             isPainting = true;
             const { x, y } = getCoordinates(e);
             points = [{ x, y }];
@@ -224,7 +203,7 @@
         }
 
         function draw(e) {
-            if (!isPainting || !bleCharacteristic) return;
+            if (!isPainting) return;
             e.preventDefault();
             const { x, y } = getCoordinates(e);
             points.push({ x, y });
@@ -245,9 +224,8 @@
 
         function stopDrawing() { isPainting = false; points = []; }
 
-        // ยิงข้อมูล 12 Bytes แบบไร้สายผ่านสัญญาณวิทยุบลูทูธ
-        async function sendCoordinates(x1, y1, x2, y2, color565) {
-            if (bleCharacteristic) {
+        function sendCoordinates(x1, y1, x2, y2, color565) {
+            if (ws.readyState === WebSocket.OPEN) {
                 const buffer = new ArrayBuffer(12);
                 const view = new Int16Array(buffer);
                 view[0] = x1;
@@ -256,25 +234,17 @@
                 view[3] = y2;
                 view[4] = color565;
                 view[5] = parseInt(sizeSlider.value);
-                
-                try {
-                    // ใช้คำสั่งเขียนข้อมูลลงบลูทูธแบบไร้สายทันที
-                    await bleCharacteristic.writeValueWithoutResponse(buffer);
-                } catch (err) {
-                    console.error("ส่งข้อมูลหลุด:", err);
-                }
+                ws.send(buffer);
             }
         }
 
-        clearBtn.addEventListener('click', async () => {
+        clearBtn.addEventListener('click', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (bleCharacteristic) {
+            if (ws.readyState === WebSocket.OPEN) {
                 const buffer = new ArrayBuffer(12);
                 const view = new Int16Array(buffer);
                 view[0] = -1; 
-                try {
-                    await bleCharacteristic.writeValueWithoutResponse(buffer);
-                } catch (err) { console.error(err); }
+                ws.send(buffer);
             }
         });
 
